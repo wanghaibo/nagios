@@ -1,0 +1,146 @@
+#!/bin/bash
+#@author wanghaibo@myhexin.com
+
+STATE_OK=0  
+STATE_WARNING=1  
+STATE_CRITICAL=2  
+STATE_UNKNOWN=3  
+
+#初始化参数
+WARNING=0
+CRITICAL=0
+TYPE="count"
+#分析参数
+while getopts "t:w:c:h" opt
+do
+    case $opt in
+        t ) TYPE=$OPTARG;;
+        w ) WARNING=$OPTARG;;
+        c ) CRITICAL=$OPTARG;;
+        ? ) 
+        echo "-t 类型"
+        echo -e "\t404 监控"
+        echo -e "\t502 监控"
+        echo -e "\t500 监控"
+        echo -e "\t503 监控"
+        echo -e "\t200 监控"
+        echo -e "\tcount 每分钟访问总数监控"
+        echo "-w warnging值" 
+        echo "-c critical值"
+        exit 1;;
+    esac
+done
+#参数校验
+if [ $WARNING -eq 0 ] || [ $CRITICAL == 0 ];then
+    echo "请输入warning 和 critical  or -h"
+    exit $STATE_UNKNOWN
+fi
+
+if [ $WARNING -gt $CRITICAL ];then
+    echo "warnging 不能大与 critical"
+    exit $STATE_UNKNOWN
+fi
+
+minute=`date -d "1 minute ago" +%H%M`
+#日志目录
+LOG_DIR=/usr/local/nginx/logs/
+#所有的access日志access模式
+ACCESS_LOG_FILE_PATTERN=*.access.log
+#上次分隔文件的时间记录文件
+LAST_MINUTE_FILE=/tmp/last_query_minute
+
+#@params origin log name
+function get_split_name
+{
+	echo "/tmp/split_$1"
+}
+
+#@param logName
+#@param minutes  0930
+function split_log
+{
+    #设置变量
+    splitLog=`get_split_name $1`
+    accessLog="${LOG_DIR}/$1"
+
+    #取出最近一分钟日志
+    tac $accessLog  | awk '
+    BEGIN{
+        FS=" "
+        OFS=" "
+    }
+    {
+        nowTime = substr($4,13,6)
+        gsub(":","",nowTime)
+
+        if (nowTime=='"$2"'){
+		print
+        } else if (nowTime<'"$2"'){
+		exit
+	}
+    }
+    ' > $splitLog
+}
+
+function split_logs
+{
+	logNames=`ls ${LOG_DIR}/${ACCESS_LOG_FILE_PATTERN} |awk -F"/" '{print $NF}'`
+	for logName in $logNames;
+	do
+		split_log $logName $1
+	done
+}
+function check_count
+{
+    totalcount=0
+	logNames=`ls ${LOG_DIR}/${ACCESS_LOG_FILE_PATTERN} |awk -F"/" '{print $NF}'`
+	for logName in $logNames;
+	do
+        splitLog=`get_split_name $logName`
+        totalcount=$(($totalcount+`cat $splitLog |wc -l`))
+	done
+    echo $totalcount
+}
+function check_status
+{  
+    totalcount=0
+	logNames=`ls ${LOG_DIR}/${ACCESS_LOG_FILE_PATTERN} |awk -F"/" '{print $NF}'`
+	for logName in $logNames;
+	do
+        splitLog=`get_split_name $logName`
+        totalcount=$(($totalcount+`cat $splitLog |grep \"$1\" | wc -l`))
+	done
+    echo $totalcount
+
+}
+
+if [[ ! -f "$LAST_MINUTE_FILE" ]] || [[ `cat $LAST_MINUTE_FILE` -ne $minute ]]; then
+	split_logs  $minute
+	echo $minute > $LAST_MINUTE_FILE
+fi
+
+currentCount=0
+case $TYPE in
+    "count" ) 
+        `check_count`;;
+    "502" ) currentCount=`check_status $TYPE`;;
+    "500" ) currentCount=`check_status $TYPE`;;
+    "503" ) currentCount=`check_status $TYPE`;;
+    "404" ) currentCount=`check_status $TYPE`;;
+    "200" ) currentCount=`check_status $TYPE`;;
+    ? ) echo "invalid opt $opt"
+    exit 1;;
+esac
+
+if [ $currentCount -lt $WARNING ] || [ $currentCount -eq $WARNING ];then
+    echo "TEST OK;$TYPE currentCount is $currentCount|count=$currentCount"
+    exit $STATE_OK
+elif [ $currentCount -gt $WARNING ] && [ $currentCount -lt $CRITICAL ];then
+    echo "TEST WARNGING:$TYPE currentCount is $currentCount|count=$currentCount"
+    exit $STATE_WARNING
+elif [ $currentCount -gt $CRITICAL ] || [ $currentCount -eq $CRITICAL ];then
+    echo "TEST CRITICAL:$TYPE currentCount is $currentCount|count=$currentCount"
+else 
+    echo "UNKNOWN STATE"
+    exit $STATE_UNKNOWN
+fi
