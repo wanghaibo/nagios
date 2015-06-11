@@ -140,6 +140,7 @@ elif [ $currentCount -gt $WARNING ] && [ $currentCount -lt $CRITICAL ];then
     exit $STATE_WARNING
 elif [ $currentCount -gt $CRITICAL ] || [ $currentCount -eq $CRITICAL ];then
     echo "TEST CRITICAL:$TYPE currentCount is $currentCount|count=$currentCount"
+    exit $STATE_CRITICAL
 else 
     echo "UNKNOWN STATE"
     exit $STATE_UNKNOWN
