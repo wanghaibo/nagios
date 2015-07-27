@@ -1,0 +1,98 @@
+#!/bin/sh
+#############################################
+# wanghaibo@myhexin.com
+
+# Nagios Plugin
+# Check if the mysql replication is ok
+#############################################
+STATE_OK=0              
+STATE_WARNING=1         
+STATE_CRITICAL=2        
+STATE_UNKNOWN=3 
+notRun="No"
+runOk="Yes"
+
+usage()
+{
+cat << EOF
+    usage: $0 options
+
+    This script check if the replication is ok for a database
+    The only informations needed are those to connect to the slave server    
+
+    OPTIONS:
+        -h Show this message
+        -u User     (mandatory)
+        -p Password (mandatory)
+        -H Host     (mandatory)
+        -P Port     (mandatory)
+        -w warning Seconds_Behind_Master     (mandatory)
+        -c critical Seconds_Behind_Master     (mandatory)
+EOF
+}
+
+while getopts "hu:p:H:P:w:c:" opt
+do
+    case $opt in
+        h)
+            usage
+            exit 1
+            ;;
+        u)
+            MYSQL_USER=$OPTARG
+            ;;
+        p)
+            MYSQL_PWD=$OPTARG
+            ;;
+        H)
+            HOST=$OPTARG
+            ;;
+        P)
+            PORT=$OPTARG
+            ;;
+        w)
+            warning=$OPTARG
+            ;;
+        c)
+            critical=$OPTARG
+            ;;
+        ?)
+            usage
+            exit
+            ;;
+    esac
+done
+
+if [[ -z "${MYSQL_USER}" ]] || [[ -z "${MYSQL_PWD}" ]] || [[ -z "${HOST}" ]] || [[ -z "${PORT}" ]] \
+|| [[ -z "${warning}" ]] || [[ -z "${critical}" ]] || [ ${warning} -le 0 ] || [ ${critical} -le 0 ]
+then
+    usage
+    exit 1
+fi
+
+#Get the status of the last synchronization
+ConnectionResult=`mysql -h ${HOST} -u ${MYSQL_USER} -p${MYSQL_PWD} -P ${PORT} -e 'show slave status\G' 2>&1`
+if [ -z "`echo "${ConnectionResult}" |grep Slave_IO_State`" ]; then
+        echo -e "CRITICAL: Unable to connect to server ${HOST}:${PORT} with username '${MYSQL_USER}' and given password"
+        exit ${STATE_CRITICAL}
+fi
+checksql=`echo "${ConnectionResult}" |grep Slave_SQL_Running: | awk '{print $2}'`
+checkio=`echo "${ConnectionResult}" |grep Slave_IO_Running: | awk '{print $2}'`
+masterinfo=`echo "${ConnectionResult}" |grep  Master_Host: | awk '{print $2}'`
+delayinfo=`echo "${ConnectionResult}" |grep Seconds_Behind_Master: | awk '{print $2}'`
+readpos=`echo "${ConnectionResult}" |grep Read_Master_Log_Pos: | awk '{print $2}'`
+execpos=`echo "${ConnectionResult}" |grep Exec_Master_Log_Pos: | awk '{print $2}'`
+
+
+if [ ${checksql} = ${runOk} ] && [ ${checkio} = ${runOk} ]; then
+    if [[ ${delayinfo} -ge ${critical} ]]
+	then echo "CRITICAL: Slave is ${delayinfo} seconds behind Master | delay=${delayinfo}"; exit ${STATE_CRITICAL}
+    elif [[ ${delayinfo} -ge ${warning} ]]
+	then echo "WARNING: Slave is ${delayinfo} seconds behind Master | delay=${delayinfo}"; exit ${STATE_WARNING}
+    else 
+	echo "Ok: ${HOST} Slave Ok seconds behind master: ${delayinfo} | delay=${delayinfo}"; exit ${STATE_OK};
+    fi
+else 
+    echo "CRITICAL: Slave_SQL_Running is answering ${checksql};Slave_IO_Running is answering ${checkio} | delay=100"; exit ${STATE_CRITICAL};
+fi
+
