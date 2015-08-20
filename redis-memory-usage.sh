@@ -4,23 +4,26 @@ if [[ $redis_cli =~ ":" ]];then
     echo "can not find redis-cli"
     exit
 fi
-used_memory=`$redis_cli info |grep 'used_memory:'|awk -F 'used_memory:' '{printf("%d",$2)}'`
-max_memory=`$redis_cli config get maxmemory|grep -v 'memory'`
 
 #初始化参数
 CRITICAL=100
+PORT=6379
 #分析参数
-while getopts "c:h" opt
+while getopts "c:P:h" opt
 do
     case $opt in
         t ) TYPE=$OPTARG;;
         w ) WARNING=$OPTARG;;
         c ) CRITICAL=$OPTARG;;
+        P ) PORT=$OPTARG;;
         ? ) 
         echo "-c 剩余容量critical值"
         exit 1;; 
     esac
 done
+used_memory=`$redis_cli -p $PORT info |grep 'used_memory:'|awk -F 'used_memory:' '{printf("%d",$2)}'`
+max_memory=`$redis_cli -p $PORT config get maxmemory|grep -v 'memory'`
+
 
 STATE_OK=0   
 STATE_WARNING=1   
