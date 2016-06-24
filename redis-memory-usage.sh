@@ -9,21 +9,19 @@ fi
 CRITICAL=100
 PORT=6379
 #分析参数
-while getopts "c:P:h" opt
+while getopts "c:P:a:h" opt
 do
     case $opt in
-        t ) TYPE=$OPTARG;;
-        w ) WARNING=$OPTARG;;
         c ) CRITICAL=$OPTARG;;
         P ) PORT=$OPTARG;;
+        a ) PASSWORD="-a "$OPTARG;;
         ? ) 
-        echo "-c 剩余容量critical值"
+        echo "-c 剩余容量critical值 -a redis密码 -P 端口"
         exit 1;; 
     esac
 done
-used_memory=`$redis_cli -p $PORT info |grep 'used_memory:'|awk -F 'used_memory:' '{printf("%d",$2)}'`
-max_memory=`$redis_cli -p $PORT config get maxmemory|grep -v 'memory'`
-
+used_memory=`$redis_cli $PASSWORD -p $PORT info |grep 'used_memory:'|awk -F 'used_memory:' '{printf("%d",$2)}'`
+max_memory=`$redis_cli $PASSWORD -p $PORT config get maxmemory|grep -v 'memory'`
 
 STATE_OK=0   
 STATE_WARNING=1   
