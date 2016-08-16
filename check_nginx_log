@@ -114,7 +114,7 @@ function check_status
 
 }
 
-if [[ ! -f "$LAST_MINUTE_FILE" ]] || [[ `cat $LAST_MINUTE_FILE` -ne $minute ]]; then
+if [[ ! -f "$LAST_MINUTE_FILE" ]] || [[ `cat $LAST_MINUTE_FILE` != $minute ]]; then
 	split_logs  $minute
 	echo $minute > $LAST_MINUTE_FILE
 fi
