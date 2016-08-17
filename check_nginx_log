@@ -62,6 +62,7 @@ function split_log
     #设置变量
     splitLog=`get_split_name $1`
     accessLog="${LOG_DIR}/$1"
+    requireTime="1"$2
 
     #取出最近一分钟日志
     tac $accessLog  | awk '
@@ -72,12 +73,13 @@ function split_log
     {
         nowTime = substr($4,13,6)
         gsub(":","",nowTime)
+        nowTime = "1"nowTime
 
-        if (nowTime=='"$2"'){
-		print
-        } else if (nowTime<'"$2"'){
-		exit
-	}
+        if (nowTime=='"$requireTime"'){
+        print
+        } else if (nowTime<'"$requireTime"'){
+        exit
+    }
     }
     ' > $splitLog
 }
